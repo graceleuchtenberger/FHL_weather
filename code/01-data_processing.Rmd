@@ -16,6 +16,9 @@ library(devtools)
 devtools::install_github("psyteachr/introdataviz")
 install.packages("introdataviz")
 library(introdataviz)
+library(splines)
+library(mgcv)
+
 ```
 
 
@@ -141,6 +144,14 @@ twentythree_clean$Wind_Chill <- as.numeric(twentythree_clean$Wind_Chill)
 twentyfour_clean$Wind_Chill <- as.numeric(twentyfour_clean$Wind_Chill)
 ```
 
+```{r}
+### Convert rain to numeric
+uploaded_trim$Rain <- as.numeric(uploaded_trim$Rain)
+twentytwo_clean$Rain <- as.numeric(twentytwo_clean$Rain)
+twentythree_clean$Rain <- as.numeric(twentythree_clean$Rain)
+twentyfour_clean$Rain <- as.numeric(twentyfour_clean$Rain)
+```
+
 ### Combine yearly datasets
 ```{r}
 weather <- bind_rows(uploaded_trim, twentytwo_clean, twentythree_clean, twentyfour_clean)
@@ -174,8 +185,23 @@ ggplot(weather_clean_unique, aes(x=Date, y = Rad_PAR))+
 ```{r}
 ggplot(weather_clean_unique, aes(x=Date, y = Rad_Energy))+
   geom_point()+
-  theme_classic()
+  theme_classic()+
+  ylim(0,1200)+
+  ylab("Radiant Energy")
 ```
+
+```{r}
+weather_clean_unique %>%
+  filter(Date >= "2023-07-25 00:00:00" & Date <= "2023-07-25 23:45:00") %>%
+ggplot(aes(x=Date, y = Rad_Energy))+
+  geom_point()+
+  theme_classic()+
+  ylim(0,1200)+
+  ylab("Radiant Energy")
+```
+
+
+
 ```{r}
 GeomSplitViolin <- ggproto("GeomSplitViolin", GeomViolin, 
                            draw_group = function(self, data, ..., draw_quantiles = NULL) {
@@ -280,7 +306,7 @@ ggplot(tot_rain, aes(x=water_year, y=tot_rain, fill = el_nino))+
 
 ```{r}
 ggplot(weather_clean_unique, aes(x=Date, y=Air_Temp))+
-  geom_point(size = 1)+
+  geom_point(size = 1, color= "#64bafb")+
   theme_classic()+
    theme(axis.text.y = element_text(size = 18,colour="black"))+ 
   theme(axis.text.x = element_text(size = 18,angle = 315, hjust=-.15 ,vjust = 1.25, colour="black"))+
@@ -289,4 +315,69 @@ ggplot(weather_clean_unique, aes(x=Date, y=Air_Temp))+
   scale_x_datetime(date_breaks = "1 year", date_labels = "%Y")
   
 ```
+```{r}
+month_rain <- weather_clean_unique %>%
+  group_by(water_year, month) %>%
+  summarize(month_rain = sum(Rain))
+month_rain$month <- factor(month_rain$month, levels=c("10", "11", "12", "1", "2", "3", "4", "5", "6", "7", "8", "9"))
+month_rain$water_year <- as.factor(month_rain$water_year)
+month_rain$month_rain <- month_rain$month_rain/10
+month_rain <- subset(month_rain, !(water_year == "2008" & month == "10"))
+month_rain <- subset(month_rain, !(water_year == "2010" & month == "06"))
+month_rain <- subset(month_rain, !(water_year == "2006" | water_year == "2025"))
+
+
+
+month_rain_max <- month_rain %>%
+  group_by(water_year)%>%
+  slice(which.max(month_rain))
+month_rain_max$month <- factor(month_rain_max$month, levels=c("10", "11", "12", "1", "2", "3", "4", "5", "6", "7", "8", "9"))
+month_rain_max$water_year <- as.factor(month_rain_max$water_year)
+
+month_rain_min <- month_rain %>%
+  group_by(water_year)%>%
+  slice(which.min(month_rain))
+month_rain_min$month <- factor(month_rain_min$month, levels=c("10", "11", "12", "1", "2", "3", "4", "5", "6", "7", "8", "9"))
+month_rain_min$water_year <- as.factor(month_rain_min$water_year)
+
+
+
+```
+
+```{r}
+
+
+level_order <- c("10", "11", "12", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+custom_labels <- c("Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep")
+
+ggplot(month_rain, aes(x = month, y = month_rain, col = water_year, group = water_year)) +
+  # Add shapes for max and min with specific mapping to shapes
+  geom_point(data = month_rain_max, aes(shape = "Annual Maximum"), size = 3) +
+  geom_point(data = month_rain_min, aes(shape = "Annual Minimum"), size = 3) +
+  geom_line() +
+  # Consolidate shape legend into a single scale
+  scale_shape_manual(
+    name = "Rainfall Markers",
+    values = c("Annual Maximum" = 16, "Annual Minimum" = 17)  # Shapes for the legend
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.y = element_text(size = 18, colour = "black"),
+    axis.text.x = element_text(size = 18, angle = 315, hjust = -0.15, vjust = 1.25, colour = "black"),
+    axis.title = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20)
+  ) +
+  labs(
+    x = "Month",
+    y = "Monthly rainfall (cm)",
+    color = "Water Year"
+  ) +
+  scale_x_discrete(
+    limits = level_order,  # Keeps the original ordering
+    labels = custom_labels # Assigns the custom labels
+  )
+
+```
+
 
