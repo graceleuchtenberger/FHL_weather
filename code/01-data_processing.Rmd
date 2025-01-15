@@ -11,15 +11,20 @@ library(readxl)
 install.packages("chron")
 library(chron)
 library(ggplot2)
+install.packages("devtools")
+library(devtools)
+devtools::install_github("psyteachr/introdataviz")
+install.packages("introdataviz")
+library(introdataviz)
 ```
 
 
 ### Load data
 ```{r}
-uploaded <- read.csv("data/FHL_Weather_All.csv")
-twentytwo <- read_xlsx("data/2022.xlsx")
-twentythree <- read_xlsx("data/2023.xlsx")
-twentyfour <- read_xlsx("data/2024.xlsx")
+uploaded <- read_csv("/Users/graceleuchtenberger/Library/Mobile Documents/com~apple~CloudDocs/Documents/FHL_weather/data/FHL_weather_All_GL.csv")
+twentytwo <- read_xlsx("/Users/graceleuchtenberger/Library/Mobile Documents/com~apple~CloudDocs/Documents/FHL_weather/data/2022.xlsx")
+twentythree <- read_xlsx("/Users/graceleuchtenberger/Library/Mobile Documents/com~apple~CloudDocs/Documents/FHL_weather/data/2023.xlsx")
+twentyfour <- read_xlsx("/Users/graceleuchtenberger/Library/Mobile Documents/com~apple~CloudDocs/Documents/FHL_weather/data/2024.xlsx")
 ```
 
 
@@ -144,6 +149,7 @@ weather$Month <- format(weather$Date, format="%m")
 weather$Year <- format(weather$Date, format="%Y")
 
 weather_clean_unique <- weather[!duplicated(weather$Date), ]
+weather_clean_unique <- na.omit(weather_clean_unique)
 ```
 
 ### Graphs
@@ -170,5 +176,117 @@ ggplot(weather_clean_unique, aes(x=Date, y = Rad_Energy))+
   geom_point()+
   theme_classic()
 ```
+```{r}
+GeomSplitViolin <- ggproto("GeomSplitViolin", GeomViolin, 
+                           draw_group = function(self, data, ..., draw_quantiles = NULL) {
+  data <- transform(data, xminv = x - violinwidth * (x - xmin), xmaxv = x + violinwidth * (xmax - x))
+  grp <- data[1, "group"]
+  newdata <- plyr::arrange(transform(data, x = if (grp %% 2 == 1) xminv else xmaxv), if (grp %% 2 == 1) y else -y)
+  newdata <- rbind(newdata[1, ], newdata, newdata[nrow(newdata), ], newdata[1, ])
+  newdata[c(1, nrow(newdata) - 1, nrow(newdata)), "x"] <- round(newdata[1, "x"])
 
+  if (length(draw_quantiles) > 0 & !scales::zero_range(range(data$y))) {
+    stopifnot(all(draw_quantiles >= 0), all(draw_quantiles <=
+      1))
+    quantiles <- ggplot2:::create_quantile_segment_frame(data, draw_quantiles)
+    aesthetics <- data[rep(1, nrow(quantiles)), setdiff(names(data), c("x", "y")), drop = FALSE]
+    aesthetics$alpha <- rep(1, nrow(quantiles))
+    both <- cbind(quantiles, aesthetics)
+    quantile_grob <- GeomPath$draw_panel(both, ...)
+    ggplot2:::ggname("geom_split_violin", grid::grobTree(GeomPolygon$draw_panel(newdata, ...), quantile_grob))
+  }
+  else {
+    ggplot2:::ggname("geom_split_violin", GeomPolygon$draw_panel(newdata, ...))
+  }
+})
+
+geom_split_violin <- function(mapping = NULL, data = NULL, stat = "ydensity", position = "identity", ..., 
+                              draw_quantiles = NULL, trim = TRUE, scale = "area", na.rm = FALSE, 
+                              show.legend = NA, inherit.aes = TRUE) {
+  layer(data = data, mapping = mapping, stat = stat, geom = GeomSplitViolin, 
+        position = position, show.legend = show.legend, inherit.aes = inherit.aes, 
+        params = list(trim = trim, scale = scale, draw_quantiles = draw_quantiles, na.rm = na.rm, ...))
+}
+```
+
+```{r}
+splitvio <- subset(weather_clean_unique, select = c(Year, Air_Temp, Wind_Chill))
+splitvio <- pivot_longer(splitvio, cols = c(Air_Temp, Wind_Chill), names_to = "Type", values_to = "Temp")
+splitvio <- na.omit(splitvio)
+max_values <- splitvio %>%
+  filter(Type == "Air_Temp")%>%
+  group_by(Year) %>%
+  summarize(Temp = max(Temp))
+
+min_values <- splitvio %>%
+  group_by(Year, Type) %>%
+  summarize(Temp = min(Temp))
+```
+
+
+
+```{r}
+ggplot(splitvio,aes(x=Year, y=Temp,fill=Type))+
+  geom_split_violin()+
+  scale_fill_manual(values=c(Wind_Chill="dodgerblue3",Air_Temp="steelblue1"), labels = c(Wind_Chill="Wind Chill", Air_Temp = "Air Temperature"))+
+  theme_classic()+
+  geom_point(data=max_values, aes(x=Year, y=Temp, fill = NULL))+
+  geom_point(data=min_values, aes(x=Year, y=Temp, color= Type), size = 3)+
+  theme(legend.position = "none")+
+  ylab("Temperature (°C)")+
+  xlab("Year")+
+  geom_hline(yintercept=10, linetype="dashed", size = 1.25)+
+  theme(axis.text.y = element_text(size = 19,colour="black"))+ 
+  theme(axis.text.x = element_text(size = 19,angle = 315, hjust=-.15 ,vjust = 1.25, colour="black"))+
+  theme(axis.title = element_text(size = 25))
+```
+
+```{r}
+weather_clean_unique <- weather_clean_unique %>%
+mutate(
+    month = as.numeric(format(Date, "%m")),
+    year = as.numeric(format(Date, "%Y")),
+    water_year = ifelse(month >= 10, year + 1, year) # October starts a new water year
+  )
+tot_rain <- weather_clean_unique %>%
+  group_by(water_year) %>%
+  summarize(tot_rain = sum(Rain))
+
+tot_rain <- tot_rain %>% filter(water_year != c(2006))
+tot_rain <- tot_rain %>% filter(water_year != c(2025))
+
+tot_rain$water_year <- as.factor(tot_rain$water_year)
+tot_rain$tot_rain <- tot_rain$tot_rain/10
+
+el_nino <- c("la_nina", "no_enso", "el_nino", "la_nina", "la_nina","no_enso","no_enso","no_enso","el_nino", "no_enso","la_nina","no_enso","el_nino","no_enso","la_nina","la_nina","la_nina","el_nino")
+tot_rain$el_nino <- el_nino
+```
+
+```{r}
+ggplot(tot_rain, aes(x=water_year, y=tot_rain, fill = el_nino))+
+  geom_bar(stat="identity")+
+  scale_fill_manual(values=c(la_nina="#200192",no_enso="#4473c4", el_nino = "#009999"), labels = c(la_nina="La Niña", no_enso = "No ENSO", el_nino = "El Niño"))+
+  theme_classic()+
+   theme(axis.text.y = element_text(size = 18,colour="black"))+ 
+  theme(axis.text.x = element_text(size = 18,angle = 315, hjust=-.15 ,vjust = 1.25, colour="black"))+
+  theme(axis.title = element_text(size = 20))+
+  theme(legend.title = element_text(size = 20))+
+  theme(legend.text = element_text(size = 20))+
+  labs(x = "Water Year", y = "Total Rainfall (cm)", fill= "ENSO")
+  
+
+
+```
+
+```{r}
+ggplot(weather_clean_unique, aes(x=Date, y=Air_Temp))+
+  geom_point(size = 1)+
+  theme_classic()+
+   theme(axis.text.y = element_text(size = 18,colour="black"))+ 
+  theme(axis.text.x = element_text(size = 18,angle = 315, hjust=-.15 ,vjust = 1.25, colour="black"))+
+  theme(axis.title = element_text(size = 20))+
+  labs(x = "Date", y = "Air Temperature (°C)")+
+  scale_x_datetime(date_breaks = "1 year", date_labels = "%Y")
+  
+```
 
