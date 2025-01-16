@@ -24,10 +24,10 @@ library(mgcv)
 
 ### Load data
 ```{r}
-uploaded <- read_csv("/Users/graceleuchtenberger/Library/Mobile Documents/com~apple~CloudDocs/Documents/FHL_weather/data/FHL_weather_All_GL.csv")
-twentytwo <- read_xlsx("/Users/graceleuchtenberger/Library/Mobile Documents/com~apple~CloudDocs/Documents/FHL_weather/data/2022.xlsx")
-twentythree <- read_xlsx("/Users/graceleuchtenberger/Library/Mobile Documents/com~apple~CloudDocs/Documents/FHL_weather/data/2023.xlsx")
-twentyfour <- read_xlsx("/Users/graceleuchtenberger/Library/Mobile Documents/com~apple~CloudDocs/Documents/FHL_weather/data/2024.xlsx")
+uploaded <- read_csv("data/FHL_weather_All_GL.csv")
+twentytwo <- read_xlsx("data/2022.xlsx")
+twentythree <- read_xlsx("data/2023.xlsx")
+twentyfour <- read_xlsx("data/2024.xlsx")
 ```
 
 
@@ -201,7 +201,7 @@ ggplot(aes(x=Date, y = Rad_Energy))+
 ```
 
 
-
+### Function to create split violin plots
 ```{r}
 GeomSplitViolin <- ggproto("GeomSplitViolin", GeomViolin, 
                            draw_group = function(self, data, ..., draw_quantiles = NULL) {
@@ -235,6 +235,7 @@ geom_split_violin <- function(mapping = NULL, data = NULL, stat = "ydensity", po
 }
 ```
 
+### Making data frame for split violin plots
 ```{r}
 splitvio <- subset(weather_clean_unique, select = c(Year, Air_Temp, Wind_Chill))
 splitvio <- pivot_longer(splitvio, cols = c(Air_Temp, Wind_Chill), names_to = "Type", values_to = "Temp")
@@ -250,7 +251,7 @@ min_values <- splitvio %>%
 ```
 
 
-
+### Split violin plot for wind chill/ air temperature
 ```{r}
 ggplot(splitvio,aes(x=Year, y=Temp,fill=Type))+
   geom_split_violin()+
@@ -267,6 +268,7 @@ ggplot(splitvio,aes(x=Year, y=Temp,fill=Type))+
   theme(axis.title = element_text(size = 25))
 ```
 
+### Total annual rain calculation and graph
 ```{r}
 weather_clean_unique <- weather_clean_unique %>%
 mutate(
@@ -289,6 +291,7 @@ tot_rain$el_nino <- el_nino
 ```
 
 ```{r}
+### Graphing total rain
 ggplot(tot_rain, aes(x=water_year, y=tot_rain, fill = el_nino))+
   geom_bar(stat="identity")+
   scale_fill_manual(values=c(la_nina="#200192",no_enso="#4473c4", el_nino = "#009999"), labels = c(la_nina="La Niña", no_enso = "No ENSO", el_nino = "El Niño"))+
@@ -304,6 +307,8 @@ ggplot(tot_rain, aes(x=water_year, y=tot_rain, fill = el_nino))+
 
 ```
 
+
+### Graphing longitudinal air temperature
 ```{r}
 ggplot(weather_clean_unique, aes(x=Date, y=Air_Temp))+
   geom_point(size = 1, color= "#64bafb")+
@@ -315,6 +320,8 @@ ggplot(weather_clean_unique, aes(x=Date, y=Air_Temp))+
   scale_x_datetime(date_breaks = "1 year", date_labels = "%Y")
   
 ```
+
+### Getting monthly total rain values + maxima and minima (reordering months by water year)
 ```{r}
 month_rain <- weather_clean_unique %>%
   group_by(water_year, month) %>%
@@ -322,6 +329,7 @@ month_rain <- weather_clean_unique %>%
 month_rain$month <- factor(month_rain$month, levels=c("10", "11", "12", "1", "2", "3", "4", "5", "6", "7", "8", "9"))
 month_rain$water_year <- as.factor(month_rain$water_year)
 month_rain$month_rain <- month_rain$month_rain/10
+### Removing points and years that don't have complete data
 month_rain <- subset(month_rain, !(water_year == "2008" & month == "10"))
 month_rain <- subset(month_rain, !(water_year == "2010" & month == "06"))
 month_rain <- subset(month_rain, !(water_year == "2006" | water_year == "2025"))
@@ -344,6 +352,7 @@ month_rain_min$water_year <- as.factor(month_rain_min$water_year)
 
 ```
 
+### Graphing monthly rainfall 
 ```{r}
 
 
